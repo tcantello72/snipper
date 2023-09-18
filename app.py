@@ -2,6 +2,7 @@ from flask import Flask
 from flask_restful import Api, Resource, reqparse, abort, fields, marshal_with
 from flask_sqlalchemy import SQLAlchemy
 
+
 app = Flask(__name__)
 api = Api(app)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///snippets.db'
@@ -14,16 +15,17 @@ class Snippet(db.Model):
     language = db.Column(db.String(25), nullable=False)
     code = db.Column(db.String(500), nullable=False)
 
-    def __repr__(self):
-        return f"Snippet(language={language}, code={code})"
-
 # Create database within app context 
 with app.app_context():
     db.create_all()
 
-snippet_put_args = reqparse.RequestParser()
-snippet_put_args.add_argument("language", type=str, help="Name of the programming language is required", required=True)
-snippet_put_args.add_argument("code", type=str, help="Code snippet is required", required=True)
+snippet_post_args = reqparse.RequestParser()
+snippet_post_args.add_argument('language', type=str, help="Name of the programming language is required", required=True)
+snippet_post_args.add_argument('code', type=str, help="Code snippet is required", required=True)
+
+snippet_update_args = reqparse.RequestParser()
+snippet_update_args.add_argument("language", type=str, help="Name of the programming language")
+snippet_update_args.add_argument("code", type=str, help="Code snippet")
 
 resource_fields = {
     'id' : fields.Integer,
@@ -33,6 +35,7 @@ resource_fields = {
 
 class Hello(Resource):
     def get(self):
+        print(self)
         return {"data": "Hello To My First API"}
 
 class Snipnets(Resource):
@@ -43,17 +46,44 @@ class Snipnets(Resource):
     
     @marshal_with(resource_fields)
     def post(self):
-        args = snippet_put_args.parse_args()
-        codeAdd = Snipnets(language=args['language'], code=args['code'])
+        args = snippet_post_args.parse_args()
+        codeAdd = Snippet(language = args['language'], code = args['code'])
         db.session.add(codeAdd)
         db.session.commit()
-        return codeAdd, 201
-    
+        return codeAdd, 201    
+         
 class SnipnetsID(Resource):
     @marshal_with(resource_fields)
     def get(self, id):
         result = Snippet.query.get_or_404(id)
         return result, 200
+    
+    @marshal_with(resource_fields)
+    def put(self, id):
+        args = snippet_update_args.parse_args()
+        result = Snippet.query.filter_by(id=id).first()
+        if not result:
+            abort(404, message="Snippet doesn't exist, cannot update")
+
+        if args['language']:
+            result.language = args['language']
+        if args['code']:
+            result.code = args['code']
+
+        db.session.commit()
+        return result
+    
+    @marshal_with(resource_fields)
+    def delete(self, id):
+        result = Snippet.query.get_or_404(id)
+
+        try:
+            db.session.delete(result)
+            db.session.commit()
+            return "", 204
+
+        except:
+            return 'There was a problem deleting that snippet'
   
 api.add_resource(Hello, "/")
 api.add_resource(Snipnets, "/snippet")
